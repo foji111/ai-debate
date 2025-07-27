@@ -20,19 +20,16 @@ app = FastAPI(
 )
 
 try:
-    # Use different keys if available, otherwise fall back to the same one
+    # Load keys from environment
     API_KEY_1 = os.getenv("GOOGLE_API_KEY")
     API_KEY_2 = os.getenv("GOOGLE_API_KEY_2", API_KEY_1) # Fallback to key 1 if key 2 isn't set
     
-    # This configuration is just a default; we re-initialize models later
-    if API_KEY_1:
-        genai.configure(api_key=API_KEY_1)
-    else:
-        print("Warning: GOOGLE_API_KEY not found.")
+    # Check if keys were loaded
+    if not API_KEY_1:
+        print("Warning: GOOGLE_API_KEY environment variable not found.")
 
 except Exception as e:
-    print(f"Error during initialization: {e}")
-    # Handle missing API key gracefully
+    print(f"Error during initial loading: {e}")
     API_KEY_1 = None
     API_KEY_2 = None
 
@@ -60,29 +57,31 @@ async def get_negotiation_summary(transcript: list, topic: str) -> str:
     if not transcript:
         return "The negotiation did not start or an error occurred."
 
-    # Use the primary API key for summarization
     if not API_KEY_1:
         return "Summarization failed: API key not configured."
 
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    # Create a simple string representation of the conversation
-    conversation_log = "\n".join([f"{item['speaker']}: {item['message']}" for item in transcript if 'error' not in item])
-    
-    prompt = f"""
-    Based on the following negotiation transcript about '{topic}', please provide a brief, neutral summary of the outcome.
-
-    Answer these questions:
-    1. What was the final position of each party?
-    2. Was a clear agreement reached? If so, what were the terms?
-    3. If no agreement was reached, what were the main points of contention?
-
-    Transcript:
-    ---
-    {conversation_log}
-    ---
-    """
     try:
+        # Initialize the summarization model with its own client options
+        model = genai.GenerativeModel(
+            'gemini-1.5-flash',
+            client_options={"api_key": API_KEY_1}
+        )
+        
+        conversation_log = "\n".join([f"{item['speaker']}: {item['message']}" for item in transcript if 'error' not in item])
+        
+        prompt = f"""
+        Based on the following negotiation transcript about '{topic}', please provide a brief, neutral summary of the outcome.
+
+        Answer these questions:
+        1. What was the final position of each party?
+        2. Was a clear agreement reached? If so, what were the terms?
+        3. If no agreement was reached, what were the main points of contention?
+
+        Transcript:
+        ---
+        {conversation_log}
+        ---
+        """
         response = await model.generate_content_async(prompt)
         return response.text
     except Exception as e:
@@ -100,32 +99,40 @@ async def start_negotiation_endpoint(request: NegotiationRequest):
 
     start_time = time.time()
     
-    # 1. Create System Instructions for each character
     instruction1 = persona_factory.create_system_instruction(**request.character1.model_dump(exclude={'model_name'}))
     instruction2 = persona_factory.create_system_instruction(**request.character2.model_dump(exclude={'model_name'}))
 
     try:
-        # 2. Initialize Models with their respective personas and API keys
-        model1 = genai.GenerativeModel(request.character1.model_name, system_instruction=instruction1)
-        model1._client._api_key = API_KEY_1 # Manually set key for this instance
+        # CORRECTED AND ROBUST INITIALIZATION
+        # Initialize each model with its own client options, passing the API key directly.
+        # This is the official and stable way to handle this.
+        model1 = genai.GenerativeModel(
+            model_name=request.character1.model_name,
+            system_instruction=instruction1,
+            client_options={"api_key": API_KEY_1}
+        )
 
-        model2 = genai.GenerativeModel(request.character2.model_name, system_instruction=instruction2)
-        model2._client._api_key = API_KEY_2 # Manually set key for this instance
+        model2 = genai.GenerativeModel(
+            model_name=request.character2.model_name,
+            system_instruction=instruction2,
+            client_options={"api_key": API_KEY_2}
+        )
         
         chat1 = model1.start_chat(history=[])
         chat2 = model2.start_chat(history=[])
 
     except Exception as e:
+        # The error message from the exception 'e' will now be much more informative.
         raise HTTPException(status_code=500, detail=f"Failed to initialize AI models: {e}")
 
-    # 3. Define the initial prompt for the first character to kick things off
+    # Define the initial prompt for the first character to kick things off
     initial_prompt = f"""
     As {request.character1.name}, make your opening statement to {request.character2.name}
     regarding the negotiation on '{request.topic}'. Clearly state your initial position
     based on your objective: '{request.character1.objective}'.
     """
     
-    # 4. Run the negotiation engine
+    # Run the negotiation engine
     transcript = negotiation_engine.run_negotiation(
         model1_session=chat1,
         model2_session=chat2,
@@ -135,13 +142,13 @@ async def start_negotiation_endpoint(request: NegotiationRequest):
         duration_seconds=request.duration_seconds
     )
     
-    # 5. Generate the final summary
+    # Generate the final summary
     print("Generating final summary...")
     summary = await get_negotiation_summary(transcript, request.topic)
     
     end_time = time.time()
     
-    # 6. Assemble the final JSON response
+    # Assemble the final JSON response
     final_response = {
         "negotiation_summary": {
             "topic": request.topic,
