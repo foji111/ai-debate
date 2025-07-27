@@ -67,7 +67,7 @@ class CharacterProfile(BaseModel):
     behavior: str
     objective: str
     strengths: str
-    model_name: str = "gemini-2.5-Flash-Lite"
+    model_name: str = "gemini-1.5-flash"
 
 class NegotiationRequest(BaseModel):
     topic: str
