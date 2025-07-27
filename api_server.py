@@ -4,7 +4,6 @@ import os
 import time
 from typing import List
 import google.generativeai as genai
-from google.ai import generativelanguage as glm # Import for the service client
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -27,6 +26,9 @@ try:
     
     if not API_KEY_1:
         print("Warning: GOOGLE_API_KEY environment variable not found.")
+    else:
+        # Configure with the primary key by default. This will be switched as needed.
+        genai.configure(api_key=API_KEY_1)
 
 except Exception as e:
     print(f"Error during initial loading: {e}")
@@ -61,12 +63,9 @@ async def get_negotiation_summary(transcript: list, topic: str) -> str:
         return "Summarization failed: API key not configured."
 
     try:
-        # Use the robust client initialization for the summarizer as well
-        summarizer_client = glm.GenerativeServiceClient(client_options={"api_key": API_KEY_1})
-        model = genai.GenerativeModel(
-            'gemini-1.5-flash',
-            client=summarizer_client
-        )
+        # Ensure the summarizer uses the primary API key
+        genai.configure(api_key=API_KEY_1)
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         conversation_log = "\n".join([f"{item['speaker']}: {item['message']}" for item in transcript if 'error' not in item])
         
@@ -104,22 +103,16 @@ async def start_negotiation_endpoint(request: NegotiationRequest):
     instruction2 = persona_factory.create_system_instruction(**request.character2.model_dump(exclude={'model_name'}))
 
     try:
-        # FINAL CORRECTED INITIALIZATION
-        # 1. Create a separate service client for each API key.
-        client1 = glm.GenerativeServiceClient(client_options={"api_key": API_KEY_1})
-        client2 = glm.GenerativeServiceClient(client_options={"api_key": API_KEY_2})
-
-        # 2. Pass the pre-configured client to the GenerativeModel using the 'client' argument.
+        # Initialize the models. The API key used for the actual calls will be
+        # set dynamically within the negotiation engine.
         model1 = genai.GenerativeModel(
             model_name=request.character1.model_name,
-            system_instruction=instruction1,
-            client=client1
+            system_instruction=instruction1
         )
 
         model2 = genai.GenerativeModel(
             model_name=request.character2.model_name,
-            system_instruction=instruction2,
-            client=client2
+            system_instruction=instruction2
         )
         
         chat1 = model1.start_chat(history=[])
@@ -135,14 +128,16 @@ async def start_negotiation_endpoint(request: NegotiationRequest):
     based on your objective: '{request.character1.objective}'.
     """
     
-    # Run the negotiation engine
+    # Run the negotiation engine, now passing the API keys to it
     transcript = negotiation_engine.run_negotiation(
         model1_session=chat1,
         model2_session=chat2,
         model1_name=f"{request.character1.name} ({request.character1.background})",
         model2_name=f"{request.character2.name} ({request.character2.background})",
         initial_prompt=initial_prompt,
-        duration_seconds=request.duration_seconds
+        duration_seconds=request.duration_seconds,
+        api_key_1=API_KEY_1,
+        api_key_2=API_KEY_2
     )
     
     # Generate the final summary

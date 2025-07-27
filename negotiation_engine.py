@@ -17,10 +17,13 @@ def run_negotiation(
     model1_name: str,
     model2_name: str,
     initial_prompt: str,
-    duration_seconds: int
+    duration_seconds: int,
+    api_key_1: str,
+    api_key_2: str
 ) -> list:
     """
     Orchestrates the negotiation and returns a structured transcript.
+    This now switches the global API key before each call.
     """
     print("--- Starting Negotiation Engine ---")
     negotiation_start_time = time.time()
@@ -30,6 +33,8 @@ def run_negotiation(
     try:
         # --- Turn 0 (Opening Statement from Model 1) ---
         simulate_thinking_pause(model1_name)
+        # Set the global API key for Model 1
+        genai.configure(api_key=api_key_1)
         response_text = model1_session.send_message(initial_prompt).text
         current_message = response_text
         
@@ -46,6 +51,8 @@ def run_negotiation(
         while time.time() - negotiation_start_time < duration_seconds:
             # --- Model 2's Turn ---
             simulate_thinking_pause(model2_name)
+            # Set the global API key for Model 2
+            genai.configure(api_key=api_key_2)
             response_text = model2_session.send_message(current_message).text
             current_message = response_text
             
@@ -62,6 +69,8 @@ def run_negotiation(
 
             # --- Model 1's Turn ---
             simulate_thinking_pause(model1_name)
+            # Set the global API key for Model 1 again
+            genai.configure(api_key=api_key_1)
             response_text = model1_session.send_message(current_message).text
             current_message = response_text
 
