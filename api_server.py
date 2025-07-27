@@ -84,7 +84,7 @@ async def get_negotiation_summary(transcript: list, topic: str) -> str:
     try:
         # Ensure the summarizer uses the primary API key
         genai.configure(api_key=API_KEY_1)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         conversation_log = "\n".join([f"{item['speaker']}: {item['message']}" for item in transcript if 'error' not in item])
         
