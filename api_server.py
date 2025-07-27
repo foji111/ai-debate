@@ -4,6 +4,7 @@ import os
 import time
 from typing import List
 import google.generativeai as genai
+from google.ai import generativelanguage as glm # Import for the service client
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -24,7 +25,6 @@ try:
     API_KEY_1 = os.getenv("GOOGLE_API_KEY")
     API_KEY_2 = os.getenv("GOOGLE_API_KEY_2", API_KEY_1) # Fallback to key 1 if key 2 isn't set
     
-    # Check if keys were loaded
     if not API_KEY_1:
         print("Warning: GOOGLE_API_KEY environment variable not found.")
 
@@ -61,10 +61,11 @@ async def get_negotiation_summary(transcript: list, topic: str) -> str:
         return "Summarization failed: API key not configured."
 
     try:
-        # Initialize the summarization model with its own client options
+        # Use the robust client initialization for the summarizer as well
+        summarizer_client = glm.GenerativeServiceClient(client_options={"api_key": API_KEY_1})
         model = genai.GenerativeModel(
             'gemini-1.5-flash',
-            client_options={"api_key": API_KEY_1}
+            client=summarizer_client
         )
         
         conversation_log = "\n".join([f"{item['speaker']}: {item['message']}" for item in transcript if 'error' not in item])
@@ -103,26 +104,28 @@ async def start_negotiation_endpoint(request: NegotiationRequest):
     instruction2 = persona_factory.create_system_instruction(**request.character2.model_dump(exclude={'model_name'}))
 
     try:
-        # CORRECTED AND ROBUST INITIALIZATION
-        # Initialize each model with its own client options, passing the API key directly.
-        # This is the official and stable way to handle this.
+        # FINAL CORRECTED INITIALIZATION
+        # 1. Create a separate service client for each API key.
+        client1 = glm.GenerativeServiceClient(client_options={"api_key": API_KEY_1})
+        client2 = glm.GenerativeServiceClient(client_options={"api_key": API_KEY_2})
+
+        # 2. Pass the pre-configured client to the GenerativeModel using the 'client' argument.
         model1 = genai.GenerativeModel(
             model_name=request.character1.model_name,
             system_instruction=instruction1,
-            client_options={"api_key": API_KEY_1}
+            client=client1
         )
 
         model2 = genai.GenerativeModel(
             model_name=request.character2.model_name,
             system_instruction=instruction2,
-            client_options={"api_key": API_KEY_2}
+            client=client2
         )
         
         chat1 = model1.start_chat(history=[])
         chat2 = model2.start_chat(history=[])
 
     except Exception as e:
-        # The error message from the exception 'e' will now be much more informative.
         raise HTTPException(status_code=500, detail=f"Failed to initialize AI models: {e}")
 
     # Define the initial prompt for the first character to kick things off
