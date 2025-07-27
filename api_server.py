@@ -22,9 +22,14 @@ app = FastAPI(
 try:
     # Use different keys if available, otherwise fall back to the same one
     API_KEY_1 = os.getenv("GOOGLE_API_KEY")
-    API_KEY_2 = os.getenv("GOOGLE_API_KEY_2") 
+    API_KEY_2 = os.getenv("GOOGLE_API_KEY_2", API_KEY_1) # Fallback to key 1 if key 2 isn't set
     
-    genai.configure(api_key=API_KEY_1) # Configure a default
+    # This configuration is just a default; we re-initialize models later
+    if API_KEY_1:
+        genai.configure(api_key=API_KEY_1)
+    else:
+        print("Warning: GOOGLE_API_KEY not found.")
+
 except Exception as e:
     print(f"Error during initialization: {e}")
     # Handle missing API key gracefully
@@ -91,16 +96,16 @@ async def start_negotiation_endpoint(request: NegotiationRequest):
     Starts a negotiation based on the provided character profiles and topic.
     """
     if not API_KEY_1 or not API_KEY_2:
-        raise HTTPException(status_code=500, detail="Google API keys are not configured on the server.")
+        raise HTTPException(status_code=500, detail="Google API keys are not configured on the server. Please check environment variables.")
 
     start_time = time.time()
-    # This is the new, corrected code
-instruction1 = persona_factory.create_system_instruction(**request.character1.model_dump(exclude={'model_name'}))
-instruction2 = persona_factory.create_system_instruction(**request.character2.model_dump(exclude={'model_name'}))
+    
+    # 1. Create System Instructions for each character
+    instruction1 = persona_factory.create_system_instruction(**request.character1.model_dump(exclude={'model_name'}))
+    instruction2 = persona_factory.create_system_instruction(**request.character2.model_dump(exclude={'model_name'}))
 
     try:
         # 2. Initialize Models with their respective personas and API keys
-        # We need to re-initialize here to scope the key correctly if they are different
         model1 = genai.GenerativeModel(request.character1.model_name, system_instruction=instruction1)
         model1._client._api_key = API_KEY_1 # Manually set key for this instance
 
