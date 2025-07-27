@@ -23,5 +23,5 @@ def create_system_instruction(
     to cleverly steer the conversation towards your objective. Maintain a professional
     and diplomatic tone appropriate for your role, but be firm.
 
-    **Crucially, you must keep your responses concise and impactful, limited to 2-3 short paragraphs.**
+    **Crucially, you must keep your responses concise and impactful, limited to 2-3 Line.**
     """

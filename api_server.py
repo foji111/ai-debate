@@ -22,7 +22,7 @@ app = FastAPI(
 try:
     # Use different keys if available, otherwise fall back to the same one
     API_KEY_1 = os.getenv("GOOGLE_API_KEY")
-    API_KEY_2 = os.getenv("GOOGLE_API_KEY_2", API_KEY_1)
+    API_KEY_2 = os.getenv("GOOGLE_API_KEY_2") 
     
     genai.configure(api_key=API_KEY_1) # Configure a default
 except Exception as e:
@@ -94,10 +94,9 @@ async def start_negotiation_endpoint(request: NegotiationRequest):
         raise HTTPException(status_code=500, detail="Google API keys are not configured on the server.")
 
     start_time = time.time()
-    
-    # 1. Create System Instructions for each character
-    instruction1 = persona_factory.create_system_instruction(**request.character1.model_dump())
-    instruction2 = persona_factory.create_system_instruction(**request.character2.model_dump())
+    # This is the new, corrected code
+instruction1 = persona_factory.create_system_instruction(**request.character1.model_dump(exclude={'model_name'}))
+instruction2 = persona_factory.create_system_instruction(**request.character2.model_dump(exclude={'model_name'}))
 
     try:
         # 2. Initialize Models with their respective personas and API keys
